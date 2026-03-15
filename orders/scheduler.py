@@ -75,7 +75,7 @@ def _advance_cleaning_orders(now):
             continue
 
         time_at_cleaner = now - last_event.timestamp
-        if time_at_cleaner < timedelta(minutes=5):
+        if time_at_cleaner < timedelta(minutes=1):
             continue  # Not ready yet
 
         # Find a valet for delivery

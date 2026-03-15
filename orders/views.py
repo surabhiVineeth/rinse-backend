@@ -34,8 +34,7 @@ class ValetViewSet(viewsets.ReadOnlyModelViewSet):
         valet = self.get_object()
         order = Order.objects.filter(
             assigned_valet=valet,
-        ).exclude(
-            status='delivered',
+            status__in=['dispatched', 'picked_up', 'ready'],
         ).prefetch_related('order_items__clothing_item', 'history').first()
 
         if not order:
@@ -183,6 +182,45 @@ class OrderViewSet(viewsets.ModelViewSet):
             order=order,
             status=order.status,
             note=note,
+        )
+
+        return Response(OrderSerializer(order).data)
+
+    @action(detail=True, methods=['post'], url_path='mark-ready')
+    def mark_ready(self, request, pk=None):
+        """
+        POST /api/orders/:id/mark-ready/
+        Called by the Cleaner UI to manually mark an order ready for delivery.
+        Transitions: at_cleaner → ready, assigns an available delivery valet.
+        """
+        from .scheduler import _find_available_valet
+        order = self.get_object()
+
+        if order.status != 'at_cleaner':
+            return Response(
+                {'error': f'Order is "{order.status}", not at_cleaner.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Release pickup valet if still attached
+        if order.assigned_valet and order.assigned_valet.status == 'on_pickup':
+            order.assigned_valet.status = Valet.AVAILABLE
+            order.assigned_valet.save()
+
+        # Assign delivery valet
+        delivery_valet = _find_available_valet()
+        if delivery_valet:
+            delivery_valet.status = 'on_delivery'
+            delivery_valet.save()
+            order.assigned_valet = delivery_valet
+
+        order.mark_ready()
+        order.save()
+
+        OrderStatusHistory.objects.create(
+            order=order,
+            status=order.status,
+            note=f'Cleaner marked order ready. {delivery_valet.name + " dispatched for delivery" if delivery_valet else "No valet available yet"}',
         )
 
         return Response(OrderSerializer(order).data)

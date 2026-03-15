@@ -22,17 +22,15 @@ class OrdersConfig(AppConfig):
             scheduler = BackgroundScheduler()
             scheduler.add_jobstore(DjangoJobStore(), 'default')
 
-            # Run every 30 seconds
-            # replace_existing=True prevents duplicate jobs if Django reloads
             scheduler.add_job(
                 auto_dispatch_orders,
-                trigger=IntervalTrigger(seconds=30),
+                trigger=IntervalTrigger(seconds=8),
                 id='auto_dispatch_orders',
                 replace_existing=True,
             )
 
             scheduler.start()
-            print('[Scheduler] Started — running every 30 seconds')
+            print('[Scheduler] Started — running every 8 seconds')
 
         except Exception as e:
             print(f'[Scheduler] Failed to start: {e}')
